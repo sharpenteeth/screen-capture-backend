@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import DateTime, ForeignKey, Integer, LargeBinary, String, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from app.timeutil import utcnow
@@ -59,6 +59,7 @@ class Screenshot(Base):
     capture_time: Mapped[datetime] = mapped_column(DateTime, index=True)
     client_file_id: Mapped[str] = mapped_column(String(80), nullable=False)
     thumbnail_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    thumbnail_data: Mapped[bytes | None] = mapped_column(LargeBinary, deferred=True, nullable=True)
     duplicate_of_id: Mapped[int | None] = mapped_column(ForeignKey("screenshots.id"), nullable=True)
     status: Mapped[str] = mapped_column(String(32), default="available")
     width: Mapped[int] = mapped_column(Integer, default=0)
@@ -91,6 +92,7 @@ class FullImage(Base):
     request_id: Mapped[int] = mapped_column(ForeignKey("image_requests.id"), index=True)
     capture_time: Mapped[datetime] = mapped_column(DateTime)
     client_file_id: Mapped[str] = mapped_column(String(80))
-    file_path: Mapped[str] = mapped_column(String(512))
+    file_path: Mapped[str] = mapped_column(String(512), default="")
+    image_data: Mapped[bytes | None] = mapped_column(LargeBinary, deferred=True, nullable=True)
     width: Mapped[int] = mapped_column(Integer, default=0)
     height: Mapped[int] = mapped_column(Integer, default=0)

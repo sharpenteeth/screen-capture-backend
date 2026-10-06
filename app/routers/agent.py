@@ -113,7 +113,7 @@ async def upload_package(
     import json
     import zipfile
 
-    from app.crypto import decrypt_bytes
+    from app.crypto import decrypt_bytes, encrypt_bytes
     from app.models import FullImage
     from app.schemas import PackageMeta
 
@@ -157,18 +157,22 @@ async def upload_package(
 
     previous = db.scalars(select(FullImage).where(FullImage.request_id == row.id)).all()
     for image in previous:
-        storage.remove(image.file_path)
+        if image.file_path:
+            try:
+                storage.remove(image.file_path)
+            except OSError:
+                pass
         db.delete(image)
     db.flush()
 
     for item, jpeg in extracted:
-        relative = storage.save_full(row.id, item.client_file_id, jpeg)
         db.add(
             FullImage(
                 request_id=row.id,
                 capture_time=parse_time(item.capture_time),
                 client_file_id=item.client_file_id,
-                file_path=relative,
+                file_path="",
+                image_data=encrypt_bytes(jpeg, storage.master_key),
                 width=item.width,
                 height=item.height,
             )

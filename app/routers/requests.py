@@ -135,7 +135,7 @@ def download_image(
     if image is None or image.request_id != row.id:
         raise HTTPException(status_code=404, detail="Image not found")
     storage: Storage = request.app.state.storage
-    return Response(content=storage.read_full(image.file_path), media_type="image/jpeg")
+    return Response(content=storage.read_image(image), media_type="image/jpeg")
 
 
 @router.get("/api/requests/{request_id}/package")
@@ -158,7 +158,7 @@ def download_package(
     meta = []
     with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         for image in images:
-            archive.writestr(f"{image.client_file_id}.jpg", storage.read_full(image.file_path))
+            archive.writestr(f"{image.client_file_id}.jpg", storage.read_image(image))
             meta.append(
                 {
                     "clientFileId": image.client_file_id,

@@ -9,8 +9,11 @@ class Storage:
     def __init__(self, root: Path, master_key: bytes) -> None:
         self.root = root
         self.master_key = master_key
-        (root / "thumbnails").mkdir(parents=True, exist_ok=True)
-        (root / "full").mkdir(parents=True, exist_ok=True)
+        for name in ("thumbnails", "full"):
+            try:
+                (root / name).mkdir(parents=True, exist_ok=True)
+            except OSError:
+                pass
 
     @classmethod
     def open(cls, root: Path) -> "Storage":
@@ -50,7 +53,16 @@ class Storage:
     def read_full(self, relative: str) -> bytes:
         return decrypt_bytes(self.path_for(relative).read_bytes(), self.master_key)
 
+    def read_image(self, image) -> bytes:
+        if image.image_data:
+            return decrypt_bytes(image.image_data, self.master_key)
+        if image.file_path:
+            return self.read_full(image.file_path)
+        raise FileNotFoundError("Image is not stored")
+
     def remove(self, relative: str) -> None:
+        if not relative:
+            return
         path = self.path_for(relative)
         if path.exists():
             path.unlink()

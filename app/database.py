@@ -1,6 +1,6 @@
 from collections.abc import Generator
 
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.models import Base
@@ -26,6 +26,20 @@ def init_db(database_url: str) -> None:
 
     SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
     Base.metadata.create_all(engine)
+    _ensure_binary_column("screenshots", "thumbnail_data")
+    _ensure_binary_column("full_images", "image_data")
+
+
+def _ensure_binary_column(table: str, column: str) -> None:
+    insp = inspect(engine)
+    if not insp.has_table(table):
+        return
+    names = {item["name"] for item in insp.get_columns(table)}
+    if column in names:
+        return
+    column_type = "BYTEA" if engine.dialect.name == "postgresql" else "BLOB"
+    with engine.begin() as connection:
+        connection.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {column_type}"))
 
 
 def get_db() -> Generator[Session, None, None]:

@@ -109,14 +109,13 @@ async def upload_thumbnail(
         if not payload:
             raise HTTPException(status_code=400, detail="Thumbnail file is empty")
 
-    storage: Storage = request.app.state.storage
-    relative = storage.save_thumbnail(user.id, client_file_id, payload) if payload else None
     shot = Screenshot(
         user_id=user.id,
         device_id=device.id,
         capture_time=parse_time(meta.capture_time),
         client_file_id=client_file_id,
-        thumbnail_path=relative,
+        thumbnail_path=None,
+        thumbnail_data=payload or None,
         duplicate_of_id=parent.id if parent else None,
         status="duplicate" if parent else "available",
         width=meta.width,
@@ -142,10 +141,12 @@ def download_thumbnail(
         raise HTTPException(status_code=404, detail="Screenshot not found")
     ensure_can_view(db, user, shot.user_id)
     resolved = resolve_thumbnail(db, shot)
-    if not resolved.thumbnail_path:
+    data = resolved.thumbnail_data
+    if not data and resolved.thumbnail_path:
+        storage: Storage = request.app.state.storage
+        data = storage.read_thumbnail(resolved.thumbnail_path)
+    if not data:
         raise HTTPException(status_code=404, detail="Thumbnail not found")
-    storage: Storage = request.app.state.storage
-    data = storage.read_thumbnail(resolved.thumbnail_path)
     return Response(content=data, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=3600"})
 
 

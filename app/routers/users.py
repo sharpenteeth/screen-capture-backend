@@ -1,7 +1,7 @@
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -69,12 +69,35 @@ def dashboard(request: Request, user: User = Depends(get_current_user), db: Sess
     people = monitored_users(db, user)
     ids = [person.id for person in people]
     since = utcnow() - timedelta(hours=24)
+    latest_device: dict[int, Device] = {}
+    latest_shot: dict[int, Screenshot] = {}
+    devices: list[Device] = []
+    if ids:
+        devices = list(db.scalars(select(Device).where(Device.user_id.in_(ids))).all())
+        for device in devices:
+            current = latest_device.get(device.user_id)
+            if current is None or (device.last_seen or since) >= (current.last_seen or since):
+                latest_device[device.user_id] = device
+        latest_time = (
+            select(Screenshot.user_id, func.max(Screenshot.capture_time).label("capture_time"))
+            .where(Screenshot.user_id.in_(ids))
+            .group_by(Screenshot.user_id)
+            .subquery()
+        )
+        for shot in db.scalars(
+            select(Screenshot).join(
+                latest_time,
+                and_(
+                    Screenshot.user_id == latest_time.c.user_id,
+                    Screenshot.capture_time == latest_time.c.capture_time,
+                ),
+            )
+        ).all():
+            latest_shot[shot.user_id] = shot
     cards = []
     for person in people:
-        device = db.scalar(select(Device).where(Device.user_id == person.id).order_by(Device.last_seen.desc()))
-        shot = db.scalar(
-            select(Screenshot).where(Screenshot.user_id == person.id).order_by(Screenshot.capture_time.desc())
-        )
+        device = latest_device.get(person.id)
+        shot = latest_shot.get(person.id)
         cards.append(
             PersonOut(
                 user_id=person.id,
@@ -92,7 +115,6 @@ def dashboard(request: Request, user: User = Depends(get_current_user), db: Sess
     captures = 0
     open_requests = 0
     if ids:
-        devices = db.scalars(select(Device).where(Device.user_id.in_(ids))).all()
         online_devices = sum(1 for device in devices if is_online(device.last_seen, settings.online_seconds))
         captures = db.scalar(
             select(func.count())

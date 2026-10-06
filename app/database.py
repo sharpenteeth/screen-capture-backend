@@ -29,6 +29,7 @@ def init_db(database_url: str) -> None:
     _ensure_binary_column("screenshots", "thumbnail_data")
     _ensure_binary_column("full_images", "image_data")
     _ensure_column("full_images", "duplicate_of_id", "INTEGER")
+    _ensure_column("screenshots", "input_active", "BOOLEAN" if engine.dialect.name == "postgresql" else "INTEGER")
 
 
 def _ensure_binary_column(table: str, column: str) -> None:

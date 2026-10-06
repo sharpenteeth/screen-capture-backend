@@ -17,7 +17,6 @@ from app.deps import (
     validate_username,
 )
 from app.models import ActivityEvent, Assignment, Device, ImageRequest, Screenshot, User
-from app.routers.activity import summarize_activity
 from app.routers.screenshots import user_screenshots
 from app.schemas import (
     AssignmentOut,
@@ -114,22 +113,27 @@ def dashboard(request: Request, user: User = Depends(get_current_user), db: Sess
             )
         ).all():
             latest_activity[event.user_id] = event
-        grouped: dict[int, list[ActivityEvent]] = {}
-        recent_events = db.scalars(
-            select(ActivityEvent)
-            .where(ActivityEvent.user_id.in_(ids), ActivityEvent.recorded_at >= since)
-            .order_by(ActivityEvent.recorded_at, ActivityEvent.id)
+        slot = ensure_capture_interval(db) * 60
+        counts: dict[int, list[int]] = {}
+        recent_shots = db.scalars(
+            select(Screenshot).where(Screenshot.user_id.in_(ids), Screenshot.capture_time >= since)
         ).all()
-        for event in recent_events:
-            grouped.setdefault(event.user_id, []).append(event)
-        now = utcnow()
-        for user_id, rows in grouped.items():
-            activity_totals[user_id] = summarize_activity(rows, now)
+        for shot in recent_shots:
+            if shot.input_active is None:
+                continue
+            bucket = counts.setdefault(shot.user_id, [0, 0])
+            bucket[0 if shot.input_active else 1] += 1
+        for user_id, (active_count, inactive_count) in counts.items():
+            activity_totals[user_id] = (active_count * slot, inactive_count * slot)
     cards = []
     for person in people:
         device = latest_device.get(person.id)
         shot = latest_shot.get(person.id)
         activity = latest_activity.get(person.id)
+        if shot is not None and shot.input_active is not None:
+            activity_state = "active" if shot.input_active else "idle"
+        else:
+            activity_state = activity.state if activity else None
         active_seconds, away_seconds = activity_totals.get(person.id, (0, 0))
         cards.append(
             PersonOut(
@@ -142,7 +146,7 @@ def dashboard(request: Request, user: User = Depends(get_current_user), db: Sess
                 device_id=device.device_key if device else None,
                 last_capture=iso_z(shot.capture_time) if shot else None,
                 last_thumbnail_url=f"/api/screenshots/{shot.id}/thumbnail" if shot else None,
-                activity_state=activity.state if activity else None,
+                activity_state=activity_state,
                 activity_app=activity.app_name if activity else None,
                 activity_title=activity.window_title if activity else None,
                 idle_seconds=activity.idle_seconds if activity else None,

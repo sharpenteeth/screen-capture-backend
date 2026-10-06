@@ -43,6 +43,7 @@ def to_screenshot(db: Session, shot: Screenshot) -> dict:
         height=shot.height,
         thumbnail_bytes=shot.thumbnail_bytes,
         thumbnail_url=f"/api/screenshots/{shot.id}/thumbnail",
+        input_active=shot.input_active,
     )
     return payload.model_dump(by_alias=True)
 
@@ -122,6 +123,7 @@ async def upload_thumbnail(
         height=meta.height,
         thumbnail_bytes=len(payload),
         content_hash=(meta.content_hash or "")[:64] or None,
+        input_active=meta.input_active,
     )
     db.add(shot)
     db.commit()

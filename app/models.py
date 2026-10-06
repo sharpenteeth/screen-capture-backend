@@ -66,6 +66,7 @@ class Screenshot(Base):
     height: Mapped[int] = mapped_column(Integer, default=0)
     thumbnail_bytes: Mapped[int] = mapped_column(Integer, default=0)
     content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    input_active: Mapped[bool | None] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 

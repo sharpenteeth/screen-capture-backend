@@ -343,9 +343,45 @@ def test_activity_tracking(api: TestClient) -> None:
     assert [item["state"] for item in body] == ["active", "idle"]
     assert body[0]["appName"] == "chrome.exe"
     assert body[0]["windowTitle"] == "Inbox"
+    from datetime import datetime, timedelta, timezone
+
+    captured = datetime.now(timezone.utc).replace(microsecond=0)
+    active_at = (captured - timedelta(minutes=30)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    inactive_at = (captured - timedelta(minutes=10)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    def upload_capture(file_id: str, when: str, active: bool) -> None:
+        response = api.post(
+            "/api/screenshots/thumbnail",
+            data={
+                "metadata": json.dumps(
+                    {
+                        "deviceId": "pc-john",
+                        "captureTime": when,
+                        "clientFileId": file_id,
+                        "width": 10,
+                        "height": 10,
+                        "inputActive": active,
+                    }
+                )
+            },
+            files={"file": ("thumb.jpg", JPEG, "image/jpeg")},
+            headers=john_headers,
+        )
+        assert response.status_code == 200, response.text
+
+    upload_capture("act0001", active_at, True)
+    upload_capture("act0002", inactive_at, False)
     overview = api.get("/api/dashboard", headers=manager_headers).json()
     person = next(item for item in overview["people"] if item["fullName"] == "John Smith")
     assert person["activityState"] == "idle"
-    assert person["activityApp"] == "chrome.exe"
-    assert person["activeSeconds"] == 300
-    assert 300 <= person["awaySeconds"] <= 330
+    assert person["activeSeconds"] == 20 * 60
+    assert person["awaySeconds"] == 20 * 60
+    shots = api.get(
+        f"/api/users/{john['id']}/screenshots",
+        params={"from": day_start, "to": day_end},
+        headers=manager_headers,
+    )
+    assert shots.status_code == 200, shots.text
+    flagged = {item["clientFileId"]: item["inputActive"] for item in shots.json()}
+    assert flagged["act0001"] is True
+    assert flagged["act0002"] is False

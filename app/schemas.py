@@ -53,6 +53,7 @@ class ThumbnailMeta(APIModel):
     duplicate_of: str | None = None
     content_hash: str | None = None
     user_id: int | None = None
+    input_active: bool | None = None
 
 
 class ScreenshotOut(APIModel):
@@ -68,6 +69,7 @@ class ScreenshotOut(APIModel):
     height: int
     thumbnail_bytes: int
     thumbnail_url: str
+    input_active: bool | None = None
 
 
 class CreateUser(APIModel):

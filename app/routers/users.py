@@ -16,7 +16,8 @@ from app.deps import (
     validate_role,
     validate_username,
 )
-from app.models import Assignment, Device, ImageRequest, Screenshot, User
+from app.models import ActivityEvent, Assignment, Device, ImageRequest, Screenshot, User
+from app.routers.activity import summarize_activity
 from app.routers.screenshots import user_screenshots
 from app.schemas import (
     AssignmentOut,
@@ -94,10 +95,42 @@ def dashboard(request: Request, user: User = Depends(get_current_user), db: Sess
             )
         ).all():
             latest_shot[shot.user_id] = shot
+    latest_activity: dict[int, ActivityEvent] = {}
+    activity_totals: dict[int, tuple[int, int]] = {}
+    if ids:
+        latest_activity_time = (
+            select(ActivityEvent.user_id, func.max(ActivityEvent.recorded_at).label("recorded_at"))
+            .where(ActivityEvent.user_id.in_(ids))
+            .group_by(ActivityEvent.user_id)
+            .subquery()
+        )
+        for event in db.scalars(
+            select(ActivityEvent).join(
+                latest_activity_time,
+                and_(
+                    ActivityEvent.user_id == latest_activity_time.c.user_id,
+                    ActivityEvent.recorded_at == latest_activity_time.c.recorded_at,
+                ),
+            )
+        ).all():
+            latest_activity[event.user_id] = event
+        grouped: dict[int, list[ActivityEvent]] = {}
+        recent_events = db.scalars(
+            select(ActivityEvent)
+            .where(ActivityEvent.user_id.in_(ids), ActivityEvent.recorded_at >= since)
+            .order_by(ActivityEvent.recorded_at, ActivityEvent.id)
+        ).all()
+        for event in recent_events:
+            grouped.setdefault(event.user_id, []).append(event)
+        now = utcnow()
+        for user_id, rows in grouped.items():
+            activity_totals[user_id] = summarize_activity(rows, now)
     cards = []
     for person in people:
         device = latest_device.get(person.id)
         shot = latest_shot.get(person.id)
+        activity = latest_activity.get(person.id)
+        active_seconds, away_seconds = activity_totals.get(person.id, (0, 0))
         cards.append(
             PersonOut(
                 user_id=person.id,
@@ -109,6 +142,12 @@ def dashboard(request: Request, user: User = Depends(get_current_user), db: Sess
                 device_id=device.device_key if device else None,
                 last_capture=iso_z(shot.capture_time) if shot else None,
                 last_thumbnail_url=f"/api/screenshots/{shot.id}/thumbnail" if shot else None,
+                activity_state=activity.state if activity else None,
+                activity_app=activity.app_name if activity else None,
+                activity_title=activity.window_title if activity else None,
+                idle_seconds=activity.idle_seconds if activity else None,
+                active_seconds=active_seconds,
+                away_seconds=away_seconds,
             )
         )
     online_devices = 0

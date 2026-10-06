@@ -69,6 +69,20 @@ class Screenshot(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
+class ActivityEvent(Base):
+    __tablename__ = "activity_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    device_id: Mapped[int] = mapped_column(ForeignKey("devices.id"), index=True)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime, index=True)
+    app_name: Mapped[str] = mapped_column(String(128), default="")
+    window_title: Mapped[str] = mapped_column(String(200), default="")
+    idle_seconds: Mapped[int] = mapped_column(Integer, default=0)
+    state: Mapped[str] = mapped_column(String(16), default="active")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
 class ImageRequest(Base):
     __tablename__ = "image_requests"
 

@@ -288,3 +288,64 @@ def test_websocket_receives_pending_request(api: TestClient) -> None:
         assert message["type"] == "pending_requests"
         assert message["requests"][0]["requestId"] == created.json()["id"]
         socket.send_json({"type": "heartbeat", "deviceId": "pc-john"})
+
+
+def test_activity_tracking(api: TestClient) -> None:
+    john_headers, john = login(api, "john")
+    manager_headers, _manager = login(api, "manager")
+    assert (
+        api.post(
+            "/api/agent/register",
+            json={"deviceKey": "pc-john", "hostname": "JOHN-PC"},
+            headers=john_headers,
+        ).status_code
+        == 200
+    )
+    from datetime import datetime, timedelta, timezone
+
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    first = (now - timedelta(minutes=10)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    second = (now - timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    day_start = now.strftime("%Y-%m-%dT00:00:00Z")
+    day_end = (now + timedelta(days=1)).strftime("%Y-%m-%dT00:00:00Z")
+    uploaded = api.post(
+        "/api/activity",
+        json={
+            "deviceId": "pc-john",
+            "events": [
+                {
+                    "recordedAt": first,
+                    "appName": "chrome.exe",
+                    "windowTitle": "Inbox",
+                    "idleSeconds": 4,
+                    "state": "active",
+                },
+                {
+                    "recordedAt": second,
+                    "appName": "chrome.exe",
+                    "windowTitle": "Inbox",
+                    "idleSeconds": 240,
+                    "state": "idle",
+                },
+            ],
+        },
+        headers=john_headers,
+    )
+    assert uploaded.status_code == 200, uploaded.text
+    assert uploaded.json()["saved"] == 2
+    rows = api.get(
+        f"/api/users/{john['id']}/activity",
+        params={"from": day_start, "to": day_end},
+        headers=manager_headers,
+    )
+    assert rows.status_code == 200, rows.text
+    body = rows.json()
+    assert [item["state"] for item in body] == ["active", "idle"]
+    assert body[0]["appName"] == "chrome.exe"
+    assert body[0]["windowTitle"] == "Inbox"
+    overview = api.get("/api/dashboard", headers=manager_headers).json()
+    person = next(item for item in overview["people"] if item["fullName"] == "John Smith")
+    assert person["activityState"] == "idle"
+    assert person["activityApp"] == "chrome.exe"
+    assert person["activeSeconds"] == 300
+    assert 300 <= person["awaySeconds"] <= 330

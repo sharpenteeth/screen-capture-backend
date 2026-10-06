@@ -108,6 +108,34 @@ class PersonOut(APIModel):
     device_id: str | None = None
     last_capture: str | None = None
     last_thumbnail_url: str | None = None
+    activity_state: str | None = None
+    activity_app: str | None = None
+    activity_title: str | None = None
+    idle_seconds: int | None = None
+    active_seconds: int = 0
+    away_seconds: int = 0
+
+
+class ActivitySample(APIModel):
+    recorded_at: str
+    app_name: str = ""
+    window_title: str = ""
+    idle_seconds: int = 0
+    state: str = "active"
+
+
+class ActivityBatch(APIModel):
+    device_id: str
+    events: list[ActivitySample]
+
+
+class ActivityOut(APIModel):
+    id: int
+    recorded_at: str
+    app_name: str
+    window_title: str
+    idle_seconds: int
+    state: str
 
 
 class DashboardOut(APIModel):

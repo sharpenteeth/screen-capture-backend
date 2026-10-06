@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app import database
 from app.config import Settings
-from app.routers import agent, auth, requests, screenshots, users
+from app.routers import activity, agent, auth, requests, screenshots, users
 from app.seed import seed
 from app.socket import agent_socket
 from app.storage import Storage
@@ -44,6 +44,7 @@ def create_app() -> FastAPI:
     )
     app.include_router(auth.router)
     app.include_router(users.router)
+    app.include_router(activity.router)
     app.include_router(screenshots.router)
     app.include_router(requests.router)
     app.include_router(agent.router)

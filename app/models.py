@@ -94,5 +94,6 @@ class FullImage(Base):
     client_file_id: Mapped[str] = mapped_column(String(80))
     file_path: Mapped[str] = mapped_column(String(512), default="")
     image_data: Mapped[bytes | None] = mapped_column(LargeBinary, deferred=True, nullable=True)
+    duplicate_of_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     width: Mapped[int] = mapped_column(Integer, default=0)
     height: Mapped[int] = mapped_column(Integer, default=0)

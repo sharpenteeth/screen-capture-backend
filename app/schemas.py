@@ -158,6 +158,7 @@ class PackageImageMeta(APIModel):
     capture_time: str
     width: int = 0
     height: int = 0
+    duplicate_of: str | None = None
 
 
 class PackageMeta(APIModel):

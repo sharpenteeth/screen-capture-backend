@@ -228,13 +228,13 @@ def test_monitoring_flow(api: TestClient) -> None:
                             "captureTime": "2026-10-05T14:05:00Z",
                             "width": 1920,
                             "height": 1080,
+                            "duplicateOf": "img0001",
                         },
                     ],
                 }
             ),
         )
         bundle.writestr("img0001.jpg", JPEG)
-        bundle.writestr("img0002.jpg", b"\xff\xd8second\xff\xd9")
     uploaded_package = api.post(
         "/api/agent/packages",
         data={"requestId": str(request_id)},
@@ -248,6 +248,7 @@ def test_monitoring_flow(api: TestClient) -> None:
     assert detail.status_code == 200, detail.text
     assert detail.json()["status"] == "ready"
     assert api.get(detail.json()["images"][0]["url"], headers=manager_headers).content == JPEG
+    assert api.get(detail.json()["images"][1]["url"], headers=manager_headers).content == JPEG
     package = api.get(f"/api/requests/{request_id}/package", headers=manager_headers)
     assert package.status_code == 200
     with zipfile.ZipFile(io.BytesIO(package.content)) as downloaded:

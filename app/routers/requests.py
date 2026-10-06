@@ -32,6 +32,18 @@ def load_request(db: Session, user: User, request_id: int) -> ImageRequest:
     return row
 
 
+def resolve_full_image(db: Session, image: FullImage) -> FullImage:
+    seen: set[int] = set()
+    current = image
+    while current.duplicate_of_id and current.id not in seen:
+        seen.add(current.id)
+        parent = db.get(FullImage, current.duplicate_of_id)
+        if parent is None:
+            break
+        current = parent
+    return current
+
+
 def serialize_request(db: Session, row: ImageRequest) -> dict:
     requester = db.get(User, row.requester_id)
     target = db.get(User, row.user_id)
@@ -135,7 +147,11 @@ def download_image(
     if image is None or image.request_id != row.id:
         raise HTTPException(status_code=404, detail="Image not found")
     storage: Storage = request.app.state.storage
-    return Response(content=storage.read_image(image), media_type="image/jpeg")
+    try:
+        payload = storage.read_image(resolve_full_image(db, image))
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Image not found") from exc
+    return Response(content=payload, media_type="image/jpeg")
 
 
 @router.get("/api/requests/{request_id}/package")
@@ -158,7 +174,7 @@ def download_package(
     meta = []
     with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         for image in images:
-            archive.writestr(f"{image.client_file_id}.jpg", storage.read_image(image))
+            archive.writestr(f"{image.client_file_id}.jpg", storage.read_image(resolve_full_image(db, image)))
             meta.append(
                 {
                     "clientFileId": image.client_file_id,

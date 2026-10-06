@@ -143,6 +143,12 @@ async def upload_package(
                 captured = parse_time(item.capture_time)
                 if captured < row.start_time or captured > row.end_time:
                     raise HTTPException(status_code=400, detail="Image is outside the requested range")
+                if item.duplicate_of:
+                    validate_file_id(item.duplicate_of)
+                    if item.duplicate_of == item.client_file_id:
+                        raise HTTPException(status_code=400, detail="Image cannot duplicate itself")
+                    extracted.append((item, None))
+                    continue
                 info = archive.getinfo(f"{item.client_file_id}.jpg")
                 if info.file_size > IMAGE_LIMIT:
                     raise HTTPException(status_code=400, detail="Image inside package is too large")
@@ -165,14 +171,36 @@ async def upload_package(
         db.delete(image)
     db.flush()
 
+    stored: dict[str, FullImage] = {}
     for item, jpeg in extracted:
+        if jpeg is None:
+            continue
+        image = FullImage(
+            request_id=row.id,
+            capture_time=parse_time(item.capture_time),
+            client_file_id=item.client_file_id,
+            file_path="",
+            image_data=encrypt_bytes(jpeg, storage.master_key),
+            width=item.width,
+            height=item.height,
+        )
+        db.add(image)
+        db.flush()
+        stored[item.client_file_id] = image
+    for item, jpeg in extracted:
+        if jpeg is not None:
+            continue
+        parent = stored.get(item.duplicate_of or "")
+        if parent is None:
+            raise HTTPException(status_code=400, detail="Duplicate log does not match an image in the package")
         db.add(
             FullImage(
                 request_id=row.id,
                 capture_time=parse_time(item.capture_time),
                 client_file_id=item.client_file_id,
                 file_path="",
-                image_data=encrypt_bytes(jpeg, storage.master_key),
+                image_data=None,
+                duplicate_of_id=parent.id,
                 width=item.width,
                 height=item.height,
             )

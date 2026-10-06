@@ -32,8 +32,17 @@ class Settings:
         database_url = os.environ.get("DATABASE_URL")
         if not database_url:
             database_url = "sqlite:///" + (data_dir / "app.db").as_posix()
+        database_url = _postgres_driver(database_url)
 
         return cls(secret_key=secret, database_url=database_url, data_dir=data_dir)
+
+
+def _postgres_driver(url: str) -> str:
+    if url.startswith("postgres://"):
+        return "postgresql+psycopg://" + url[len("postgres://") :]
+    if url.startswith("postgresql://"):
+        return "postgresql+psycopg://" + url[len("postgresql://") :]
+    return url
 
 
 def _load_env_file(path: Path) -> None:
